@@ -1,34 +1,26 @@
 import streamlit as st
 import pandas as pd
+from io import BytesIO
 from datetime import datetime
 import os
 
-# -----------------------------
-# CONFIGURACIÓN INICIAL
-# -----------------------------
-ARCHIVO_RESPUESTAS = "confirmaciones_respuestas.csv"
+st.set_page_config(page_title="Revisión de Carga Académica", layout="wide")
 
-# Crear archivo de respuestas si no existe
-if not os.path.exists(ARCHIVO_RESPUESTAS):
-    df_vacio = pd.DataFrame(columns=[
-        "Fecha Hora", "Nómina", "Nombre Profesor", "Confirmación", "Comentarios"
-    ])
-    df_vacio.to_csv(ARCHIVO_RESPUESTAS, index=False)
+# Botón para reiniciar conversación
+if st.button("🔄 Reiniciar conversación"):
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.experimental_rerun()
 
-# -----------------------------
-# CARGA DEL CSV DE CARGA DOCENTE
-# -----------------------------
+# Cargar datos
 @st.cache_data
 def cargar_datos():
-    df = pd.read_csv("Datos_Roster_V2.csv")
-    df.columns = df.columns.str.strip()
-    return df
+    return pd.read_csv("Datos_Roster_V2.csv")
 
 df = cargar_datos()
+df.columns = df.columns.str.strip()
 
-# -----------------------------
-# CLASIFICAR TIPO DE UF
-# -----------------------------
+# Clasificar tipo de UF
 def clasificar_tipo_uf(uf):
     if isinstance(uf, str):
         if uf.endswith("S"):
@@ -41,171 +33,187 @@ def clasificar_tipo_uf(uf):
             return "Materia"
     return "Desconocido"
 
-df["Tipo de UF"] = df["UF"].apply(clasificar_tipo_uf)
+df['Tipo de UF'] = df['UF'].apply(clasificar_tipo_uf)
 
-# -----------------------------
-# AGREGAR COORDINADORES
-# -----------------------------
-if "Carga Co." in df.columns:
-    coordinadores = df[df["Carga Co."].notnull()][["UF", "Grupo", "Profesor", "Correo"]].copy()
+# Detectar coordinadores
+if 'Carga Co.' in df.columns:
+    coordinadores = df[df['Carga Co.'].notnull()][['UF', 'Grupo', 'Profesor', 'Correo']].copy()
     coordinadores = coordinadores.rename(columns={
-        "Profesor": "Coordinador",
-        "Correo": "Correo Coordinador"
+        'Profesor': 'Coordinador',
+        'Correo': 'Correo Coordinador'
     })
-    df = df.merge(coordinadores, on=["UF", "Grupo"], how="left")
+    df = df.merge(coordinadores, on=['UF', 'Grupo'], how='left')
 
-# -----------------------------
-# INTERFAZ DE USUARIO
-# -----------------------------
-st.title("🤖 Confirmación de Carga Académica")
+st.title("🤖 Chatbot de Revisión de Carga Académica")
 
-# Botón para reiniciar conversación siempre visible arriba
-if st.button("🔄 Reiniciar conversación", key="reiniciar"):
-    st.experimental_rerun()
+if 'step' not in st.session_state:
+    st.session_state.step = 1
 
-st.markdown("👋 **Hola Profesor, estoy aquí para ayudarte a revisar tu carga académica para este próximo semestre.**")
+# Paso 1: Captura nombre
+if st.session_state.step == 1:
+    with st.form("nombre_form"):
+        nombre = st.text_input("👋 Hola Profesor, estoy aquí para ayudarte a revisar tu carga académica para este próximo semestre.\n\nPor favor, indícame tu nombre:")
+        submitted = st.form_submit_button("Continuar ➡️")
+        if submitted and nombre:
+            st.session_state.nombre = nombre
+            st.session_state.step = 2
+            st.experimental_rerun()
 
-nombre_profesor = st.text_input("Por favor indícame tu nombre:")
+# Paso 2: Captura nómina
+elif st.session_state.step == 2:
+    with st.form("nomina_form"):
+        nomina = st.text_input(f"Gracias {st.session_state.nombre}, ahora por favor indícame tu número de nómina (ej. L01234567):")
+        submitted = st.form_submit_button("Continuar ➡️")
+        if submitted and nomina:
+            st.session_state.nomina = nomina.strip()
+            st.session_state.step = 3
+            st.experimental_rerun()
 
-if nombre_profesor.strip() != "":
-    nomina = st.text_input(f"Gracias {nombre_profesor}, ahora por favor ingresa tu número de nómina (ej. L01234567):")
+# Paso 3: Mostrar carga
+elif st.session_state.step == 3:
+    datos_profesor = df[df['Nómina'] == st.session_state.nomina].copy()
+    if datos_profesor.empty:
+        st.error("❌ No se encontraron asignaciones para ese número de nómina.")
+    else:
+        nombre_profesor_csv = datos_profesor['Profesor'].iloc[0] if 'Profesor' in datos_profesor.columns else "Nombre no disponible"
 
-    if nomina:
-        datos_profesor = df[df["Nómina"] == nomina].copy()
+        datos_profesor['Carga Co.'] = pd.to_numeric(datos_profesor.get('Carga Co.', 0), errors='coerce').fillna(0)
+        datos_profesor['UDCs'] = pd.to_numeric(datos_profesor.get('UDCs', 0), errors='coerce').fillna(0)
+        total_carga_co = round(datos_profesor['Carga Co.'].sum(), 2)
+        total_udcs = round(datos_profesor['UDCs'].sum(), 2)
+        udcs_totales = round(total_udcs + total_carga_co, 2)
 
-        if datos_profesor.empty:
-            st.warning("⚠️ No se encontraron asignaciones para esa nómina.")
-        else:
-            # Asegurar valores numéricos
-            datos_profesor["Carga Co."] = pd.to_numeric(datos_profesor.get("Carga Co.", 0), errors="coerce").fillna(0)
-            datos_profesor["UDCs"] = pd.to_numeric(datos_profesor.get("UDCs", 0), errors="coerce").fillna(0)
+        def mostrar_coordinador(row):
+            if row['Tipo de UF'] in ['Bloque', 'Concentración']:
+                return f"{row.get('Coordinador', '')} ({row.get('Correo Coordinador', '')})"
+            return ""
 
-            total_carga_co = round(datos_profesor["Carga Co."].sum(), 2)
-            total_udcs = round(datos_profesor["UDCs"].sum(), 2)
-            udcs_totales = round(total_udcs + total_carga_co, 2)
+        datos_profesor['Coordinador de Bloque'] = datos_profesor.apply(mostrar_coordinador, axis=1)
+        datos_profesor['Grupo'] = datos_profesor['Grupo'].fillna('').apply(
+            lambda x: str(int(x)) if isinstance(x, float) else str(x)
+        )
 
-            # Función para mostrar coordinador de bloque
-            def mostrar_coordinador(row):
-                if row["Tipo de UF"] in ["Bloque", "Concentración"]:
-                    return f"{row.get('Coordinador', '')} ({row.get('Correo Coordinador', '')})"
-                return ""
+        columnas = ['UF', 'Grupo', 'Nombre de UF', 'Inglés', 'Tipo de UF',
+                    '% de Resp', 'UDCs', 'Periodo', 'Horario', 'Coordinador de Bloque']
+        columnas_existentes = [col for col in columnas if col in datos_profesor.columns]
 
-            datos_profesor["Coordinador de Bloque"] = datos_profesor.apply(mostrar_coordinador, axis=1)
-            datos_profesor["Grupo"] = datos_profesor["Grupo"].fillna("").apply(
-                lambda x: str(int(x)) if isinstance(x, float) else str(x)
-            )
+        st.write("✅ Aquí está tu carga académica para el semestre:")
+        st.dataframe(
+            datos_profesor[columnas_existentes].reset_index(drop=True),
+            use_container_width=True
+        )
 
-            columnas = [
-                "UF", "Grupo", "Nombre de UF", "Inglés", "Tipo de UF",
-                "% de Resp", "UDCs", "Periodo", "Horario", "Coordinador de Bloque"
-            ]
-            resultado = datos_profesor[columnas]
+        st.write(f"""
+        <div style='display:flex; gap:20px;'>
+            <div style='background-color:#f0f8ff; padding:10px; border-left:5px solid #003366; flex:1; text-align:center;'>
+                <b>Total UDCs Docente</b><br><span style='font-size:20px;'>{total_udcs}</span>
+            </div>
+            <div style='background-color:#f0f8ff; padding:10px; border-left:5px solid #003366; flex:1; text-align:center;'>
+                <b>Total UDCs Coordinación</b><br><span style='font-size:20px;'>{total_carga_co}</span>
+            </div>
+            <div style='background-color:#f0f8ff; padding:10px; border-left:5px solid #003366; flex:1; text-align:center;'>
+                <b>UDCs Totales</b><br><span style='font-size:20px;'>{udcs_totales}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-            # Formatear columnas numéricas para evitar errores y mejorar visualización
-            resultado = resultado.copy()
-            if "UDCs" in resultado.columns:
-                resultado["UDCs"] = pd.to_numeric(resultado["UDCs"], errors="coerce")
-                resultado["UDCs"] = resultado["UDCs"].map(lambda x: f"{x:.2f}" if pd.notnull(x) else "")
-            if "% de Resp" in resultado.columns:
-                resultado["% de Resp"] = pd.to_numeric(resultado["% de Resp"], errors="coerce")
-                resultado["% de Resp"] = resultado["% de Resp"].map(lambda x: f"{x:.2f}" if pd.notnull(x) else "")
-
-            st.subheader("📋 Esta es tu carga académica asignada:")
-            st.dataframe(resultado, use_container_width=True)
-
-            # Mostrar recuadros de totales
-            col1, col2, col3 = st.columns(3)
-            col1.metric("📘 Total UDCs Docente", f"{total_udcs:.2f}")
-            col2.metric("👥 Total UDCs Coordinación", f"{total_carga_co:.2f}")
-            col3.metric("📊 UDCs Totales", f"{udcs_totales:.2f}")
-
-            st.subheader("✅ Confirmación de carga")
-            confirmacion = st.radio(
-                "¿Confirmas tu carga académica asignada para este semestre?",
-                ["Sí", "No"],
-                horizontal=True,
-                index=None  # Para que no haya opción seleccionada al inicio
-            )
-
-            comentario_placeholder = ""
-            if confirmacion == "Sí":
-                st.info("✅ Gracias por confirmar tu carga, apreciamos mucho tu dedicación y colaboración en este proceso. ¡Mucho éxito para este semestre!")
-                comentario_placeholder = "Si tienes algún comentario adicional, puedes indicarlo aquí."
-            elif confirmacion == "No":
-                st.warning("⚠️ Lamentamos que tu carga actual no sea de tu agrado. Por favor explícanos qué parte de tu carga presenta una limitación para poder revisarla.")
-                comentario_placeholder = "Por favor detalla las limitaciones que observas en tu carga."
-
-            comentarios = st.text_area(
-                "En caso de tener algún comentario, duda o sugerencia respecto a tu carga académica asignada, por favor indícalo a continuación:",
-                placeholder=comentario_placeholder
-            )
-
-            if st.button("📨 Enviar confirmación y comentarios"):
-                fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                nueva_fila = pd.DataFrame([{
-                    "Fecha Hora": fecha_hora,
-                    "Nómina": nomina,
-                    "Nombre Profesor": nombre_profesor,
+        with st.form("confirm_form"):
+            confirmacion = st.radio("¿Confirmas tu carga asignada para este semestre?", options=["Sí", "No"], index=None)
+            comentarios = st.text_area("Comentarios, dudas o sugerencias adicionales:")
+            submitted = st.form_submit_button("Enviar respuesta ✅")
+            if submitted and confirmacion:
+                # Guardar en CSV
+                respuesta_df = pd.DataFrame([{
+                    "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "Nombre": nombre_profesor_csv,
+                    "Nómina": st.session_state.nomina,
                     "Confirmación": confirmacion,
                     "Comentarios": comentarios
                 }])
-
-                # Guardar en CSV sin sobrescribir (modo append)
-                if os.path.exists(ARCHIVO_RESPUESTAS):
-                    nueva_fila.to_csv(ARCHIVO_RESPUESTAS, mode="a", header=False, index=False)
+                if os.path.exists("confirmaciones_respuestas.csv"):
+                    respuesta_df.to_csv("confirmaciones_respuestas.csv", mode='a', header=False, index=False)
                 else:
-                    nueva_fila.to_csv(ARCHIVO_RESPUESTAS, mode="w", header=True, index=False)
+                    respuesta_df.to_csv("confirmaciones_respuestas.csv", index=False)
 
-                st.success("✅ Tu confirmación y comentarios se han registrado correctamente. ¡Gracias por tu tiempo!")
+                st.success("✅ Tu respuesta ha sido registrada correctamente. ¡Gracias por tu tiempo y colaboración!")
+                st.session_state.step = 4
+                st.session_state.nombre_profesor_csv = nombre_profesor_csv
+                st.session_state.datos_profesor_tabla = datos_profesor[columnas_existentes]
+                st.session_state.total_udcs = total_udcs
+                st.session_state.total_carga_co = total_carga_co
+                st.session_state.udcs_totales = udcs_totales
+                st.experimental_rerun()
 
-                # Generar HTML imprimible para descarga
-                estilo = """
-                <style>
-                  body { font-family: Verdana, Segoe UI, sans-serif; font-size: 12px; }
-                  h1 { text-align: center; font-weight: bold; }
-                  h2 { text-align: center; margin-top: 0; margin-bottom: 20px; }
-                  table { border-collapse: collapse; width: 100%; font-size: 10px; }
-                  th, td { border: 1px solid #ccc; padding: 6px; text-align: center; word-wrap: break-word; }
-                  th { background-color: #003366; color: white; }
-                  .resumen-container { display: flex; gap: 15px; margin-top: 15px; font-size: 12px; }
-                  .card { background-color: #f0f8ff; border-left: 5px solid #003366; padding: 10px 15px; flex: 1; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-align: center; }
-                  .card strong { display: block; font-size: 12px; color: #003366; margin-bottom: 3px; }
-                  .card span { font-size: 16px; font-weight: bold; color: #000; }
-                </style>
-                """
+# Paso 4: Descargar carga como HTML
+elif st.session_state.step == 4:
+    st.info("Si lo deseas, puedes descargar tu carga académica en formato imprimible para tus registros.")
 
-                # Convertir tabla a HTML
-                tabla_html = resultado.to_html(index=False, escape=False, na_rep='', classes='tabla-centro')
+    fecha_actual = datetime.now().strftime("%d/%m/%Y")
+    nomina = st.session_state.nomina
+    nombre_profesor_csv = st.session_state.nombre_profesor_csv
 
-                resumen_html = f"""
-                <div class="resumen-container">
-                  <div class="card">
-                    <strong>Total UDCs Docente</strong>
-                    <span>{total_udcs:.2f}</span>
-                  </div>
-                  <div class="card">
-                    <strong>Total UDCs Coordinación</strong>
-                    <span>{total_carga_co:.2f}</span>
-                  </div>
-                  <div class="card">
-                    <strong>UDCs Totales</strong>
-                    <span>{udcs_totales:.2f}</span>
-                  </div>
-                </div>
-                """
+    tabla_html = st.session_state.datos_profesor_tabla.to_html(index=False, classes='tabla-centro', border=1)
 
-                encabezado_html = f"""
-                <h1>Chatbot para Carga Académica AD25</h1>
-                <h2>Departamento Mecánica y Materiales Avanzados</h2>
-                <p><b>Profesor:</b> {nombre_profesor}</p>
-                <p><b>Nómina:</b> {nomina}</p>
-                <hr>
-                """
+    resumen_html = f"""
+    <div style='display:flex; gap:20px; margin-top:15px;'>
+        <div style='background-color:#f0f8ff; padding:10px; border-left:5px solid #003366; flex:1; text-align:center;'>
+            <b>Total UDCs Docente</b><br><span style='font-size:18px;'>{st.session_state.total_udcs}</span>
+        </div>
+        <div style='background-color:#f0f8ff; padding:10px; border-left:5px solid #003366; flex:1; text-align:center;'>
+            <b>Total UDCs Coordinación</b><br><span style='font-size:18px;'>{st.session_state.total_carga_co}</span>
+        </div>
+        <div style='background-color:#f0f8ff; padding:10px; border-left:5px solid #003366; flex:1; text-align:center;'>
+            <b>UDCs Totales</b><br><span style='font-size:18px;'>{st.session_state.udcs_totales}</span>
+        </div>
+    </div>
+    """
 
-                html_completo = estilo + encabezado_html + tabla_html + resumen_html
+    html_completo = f"""
+    <html>
+    <head>
+    <meta charset="utf-8">
+    <title>Carga Académica</title>
+    <style>
+        body {{
+            font-family: Verdana, sans-serif;
+            margin: 40px;
+        }}
+        h1, h2 {{
+            text-align: center;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }}
+        th, td {{
+            border: 1px solid #ccc;
+            padding: 6px;
+            text-align: center;
+        }}
+        th {{
+            background-color: #003366;
+            color: white;
+        }}
+    </style>
+    </head>
+    <body>
+    <h1>Carga Académica Agosto-Diciembre 2025</h1>
+    <h2>Departamento de Mecánica y Materiales Avanzados</h2>
+    <p style='text-align:center;'><b>Profesor:</b> {nombre_profesor_csv} | <b>Nómina:</b> {nomina} | <b>Fecha:</b> {fecha_actual}</p>
+    {tabla_html}
+    {resumen_html}
+    </body>
+    </html>
+    """
 
-                st.markdown("---")
-                st.markdown("### 🖨️ Vista previa para imprimir o guardar en PDF")
-                st.markdown(html_completo, unsafe_allow_html=True)
+    buffer = BytesIO()
+    buffer.write(html_completo.encode())
+    buffer.seek(0)
 
+    st.download_button(
+        label="📄 Descargar carga académica (HTML imprimible)",
+        data=buffer,
+        file_name=f"Carga_{nomina}_{nombre_profesor_csv.replace(' ', '_')}.html",
+        mime="text/html"
+    )
