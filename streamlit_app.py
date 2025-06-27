@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
-import unicodedata
-import re
 
 st.set_page_config(page_title="Revisión de Carga Académica", layout="wide")
 
@@ -91,7 +89,8 @@ elif st.session_state.step == 3:
                     '% de Resp', 'UDCs', 'Periodo', 'Horario', 'Coordinador de Bloque']
 
         st.write("✅ Aquí está tu carga académica:")
-        st.dataframe(datos_profesor[columnas], use_container_width=True)
+        columnas_existentes = [col for col in columnas if col in datos_profesor.columns]
+        st.dataframe(datos_profesor[columnas_existentes], use_container_width=True)
 
         st.write(f"**Total UDCs Docente:** {total_udcs} | **Total UDCs Coordinación:** {total_carga_co} | **UDCs Totales:** {udcs_totales}")
 
@@ -124,9 +123,11 @@ elif st.session_state.step == 5:
     st.success("✅ Gracias por tus comentarios, se registraron correctamente.")
 
     datos_profesor = df[df['Nómina'] == st.session_state.nomina].copy()
+
     columnas = ['UF', 'Grupo', 'Nombre de UF', 'Inglés', 'Tipo de UF',
                 '% de Resp', 'UDCs', 'Periodo', 'Horario', 'Coordinador de Bloque']
-    tabla_html = datos_profesor[columnas].to_html(index=False, classes='tabla-centro', border=1)
+    columnas_existentes = [col for col in columnas if col in datos_profesor.columns]
+    tabla_html = datos_profesor[columnas_existentes].to_html(index=False, classes='tabla-centro', border=1)
 
     fecha_actual = datetime.now().strftime("%d/%m/%Y")
     nombre_profesor = st.session_state.nombre
