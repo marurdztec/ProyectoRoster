@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+from io import BytesIO
+from datetime import datetime
 
 st.set_page_config(page_title="Revisión de Carga Académica", layout="wide")
 
@@ -105,3 +107,59 @@ elif st.session_state.step == 3:
             </button>
         </a>
         """, unsafe_allow_html=True)
+
+        from io import BytesIO
+
+        fecha_actual = datetime.now().strftime("%d/%m/%Y")
+        nomina = st.session_state.nomina
+        nombre_profesor_csv = datos_profesor['Profesor'].iloc[0] if 'Profesor' in datos_profesor.columns else "Nombre no disponible"
+
+        tabla_html = datos_profesor[columnas_existentes].to_html(index=False, border=1)
+
+        resumen_html = f"""
+        <div style='display:flex; gap:20px; margin-top:15px;'>
+            <div style='background-color:#f0f8ff; padding:10px; border-left:5px solid #003366; flex:1; text-align:center;'>
+                <b>Total UDCs Docente</b><br><span style='font-size:18px;'>{total_udcs}</span>
+            </div>
+            <div style='background-color:#f0f8ff; padding:10px; border-left:5px solid #003366; flex:1; text-align:center;'>
+                <b>Total UDCs Coordinación</b><br><span style='font-size:18px;'>{total_carga_co}</span>
+            </div>
+            <div style='background-color:#f0f8ff; padding:10px; border-left:5px solid #003366; flex:1; text-align:center;'>
+                <b>UDCs Totales</b><br><span style='font-size:18px;'>{udcs_totales}</span>
+            </div>
+        </div>
+        """
+
+        html_completo = f"""
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <title>Carga Académica</title>
+        <style>
+            body {{ font-family: Verdana, sans-serif; margin: 40px; }}
+            h1, h2 {{ text-align: center; }}
+            table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
+            th, td {{ border: 1px solid #ccc; padding: 6px; text-align: center; }}
+            th {{ background-color: #003366; color: white; }}
+        </style>
+        </head>
+        <body>
+        <h1>Carga Académica Agosto-Diciembre 2025</h1>
+        <h2>Departamento de Mecánica y Materiales Avanzados</h2>
+        <p style='text-align:center;'><b>Profesor:</b> {nombre_profesor_csv} | <b>Nómina:</b> {nomina} | <b>Fecha:</b> {fecha_actual}</p>
+        {tabla_html}
+        {resumen_html}
+        </body>
+        </html>
+        """
+
+        buffer = BytesIO()
+        buffer.write(html_completo.encode())
+        buffer.seek(0)
+
+        st.download_button(
+            label="📄 Descargar carga académica en HTML imprimible",
+            data=buffer,
+            file_name=f"Carga_{nomina}_{nombre_profesor_csv.replace(' ', '_')}.html",
+            mime="text/html"
+        )
