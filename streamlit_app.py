@@ -108,7 +108,8 @@ elif st.session_state.step == 3:
         </a>
         """, unsafe_allow_html=True)
 
-        from io import BytesIO
+        st.markdown("## \n")
+        st.info("Si deseas descargar un archivo de tu carga para tus registros, utiliza el botón siguiente:")
 
         fecha_actual = datetime.now().strftime("%d/%m/%Y")
         nomina = st.session_state.nomina
