@@ -2,12 +2,13 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
+import os
 
 st.set_page_config(page_title="Revisión de Carga Académica", layout="wide")
 
 # Botón para reiniciar conversación
 if st.button("🔄 Reiniciar conversación"):
-    for key in st.session_state.keys():
+    for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.experimental_rerun()
 
@@ -48,21 +49,27 @@ st.title("🤖 Chatbot de Revisión de Carga Académica")
 if 'step' not in st.session_state:
     st.session_state.step = 1
 
+# Paso 1: Captura nombre
 if st.session_state.step == 1:
-    st.write("👋 Hola Profesor, estoy aquí para ayudarte a revisar tu carga académica para este próximo semestre.")
-    nombre = st.text_input("Por favor, indícame tu nombre:")
-    if nombre:
-        st.session_state.nombre = nombre
-        if st.button("➡️ Continuar"):
+    with st.form("nombre_form"):
+        nombre = st.text_input("👋 Hola Profesor, estoy aquí para ayudarte a revisar tu carga académica para este próximo semestre.\n\nPor favor, indícame tu nombre:")
+        submitted = st.form_submit_button("Continuar ➡️")
+        if submitted and nombre:
+            st.session_state.nombre = nombre
             st.session_state.step = 2
+            st.experimental_rerun()
 
+# Paso 2: Captura nómina
 elif st.session_state.step == 2:
-    nomina = st.text_input(f"Gracias {st.session_state.nombre}, ahora por favor indícame tu número de nómina (ej. L01234567):")
-    if nomina:
-        st.session_state.nomina = nomina.strip()
-        if st.button("➡️ Continuar"):
+    with st.form("nomina_form"):
+        nomina = st.text_input(f"Gracias {st.session_state.nombre}, ahora por favor indícame tu número de nómina (ej. L01234567):")
+        submitted = st.form_submit_button("Continuar ➡️")
+        if submitted and nomina:
+            st.session_state.nomina = nomina.strip()
             st.session_state.step = 3
+            st.experimental_rerun()
 
+# Paso 3: Mostrar carga
 elif st.session_state.step == 3:
     datos_profesor = df[df['Nómina'] == st.session_state.nomina].copy()
     if datos_profesor.empty:
@@ -90,8 +97,7 @@ elif st.session_state.step == 3:
                     '% de Resp', 'UDCs', 'Periodo', 'Horario', 'Coordinador de Bloque']
         columnas_existentes = [col for col in columnas if col in datos_profesor.columns]
 
-        st.write("✅ Aquí está tu carga académica:")
-
+        st.write("✅ Aquí está tu carga académica para el semestre:")
         st.dataframe(
             datos_profesor[columnas_existentes].reset_index(drop=True),
             use_container_width=True
@@ -111,38 +117,36 @@ elif st.session_state.step == 3:
         </div>
         """, unsafe_allow_html=True)
 
-        confirmacion = st.radio(
-            "¿Confirmas tu carga asignada para este semestre?",
-            options=["Sí", "No"],
-            index=None
-        )
-        if confirmacion:
-            st.session_state.confirmacion = confirmacion
-            st.session_state.nombre_profesor_csv = nombre_profesor_csv
-            st.session_state.total_carga_co = total_carga_co
-            st.session_state.total_udcs = total_udcs
-            st.session_state.udcs_totales = udcs_totales
-            st.session_state.datos_profesor_tabla = datos_profesor[columnas_existentes].copy()
-            if st.button("➡️ Continuar"):
+        with st.form("confirm_form"):
+            confirmacion = st.radio("¿Confirmas tu carga asignada para este semestre?", options=["Sí", "No"], index=None)
+            comentarios = st.text_area("Comentarios, dudas o sugerencias adicionales:")
+            submitted = st.form_submit_button("Enviar respuesta ✅")
+            if submitted and confirmacion:
+                # Guardar en CSV
+                respuesta_df = pd.DataFrame([{
+                    "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "Nombre": nombre_profesor_csv,
+                    "Nómina": st.session_state.nomina,
+                    "Confirmación": confirmacion,
+                    "Comentarios": comentarios
+                }])
+                if os.path.exists("confirmaciones_respuestas.csv"):
+                    respuesta_df.to_csv("confirmaciones_respuestas.csv", mode='a', header=False, index=False)
+                else:
+                    respuesta_df.to_csv("confirmaciones_respuestas.csv", index=False)
+
+                st.success("✅ Tu respuesta ha sido registrada correctamente. ¡Gracias por tu tiempo y colaboración!")
                 st.session_state.step = 4
+                st.session_state.nombre_profesor_csv = nombre_profesor_csv
+                st.session_state.datos_profesor_tabla = datos_profesor[columnas_existentes]
+                st.session_state.total_udcs = total_udcs
+                st.session_state.total_carga_co = total_carga_co
+                st.session_state.udcs_totales = udcs_totales
+                st.experimental_rerun()
 
+# Paso 4: Descargar carga como HTML
 elif st.session_state.step == 4:
-    if st.session_state.confirmacion == "Sí":
-        st.success("✅ Gracias por confirmar tu carga. Apreciamos mucho tu dedicación y colaboración en este proceso. ¡Mucho éxito para este semestre!")
-        comentarios = st.text_area(
-            "Si tienes algún comentario adicional, por favor indícalo aquí:"
-        )
-    else:
-        st.warning("⚠️ Lamentamos que tu carga no sea de tu agrado.")
-        comentarios = st.text_area(
-            "Por favor, explícame qué parte de tu carga presenta una limitación para poder aceptarla:"
-        )
-    if st.button("➡️ Finalizar"):
-        st.session_state.comentarios = comentarios
-        st.session_state.step = 5
-
-elif st.session_state.step == 5:
-    st.success("✅ Gracias por tus comentarios, se registraron correctamente.")
+    st.info("Si lo deseas, puedes descargar tu carga académica en formato imprimible para tus registros.")
 
     fecha_actual = datetime.now().strftime("%d/%m/%Y")
     nomina = st.session_state.nomina
