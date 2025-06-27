@@ -62,7 +62,13 @@ st.markdown("""
 
 # Botón para reiniciar conversación arriba
 if st.button("🔄 Reiniciar conversación", key="reiniciar", help="Borrar respuestas y empezar de nuevo"):
-    # Código para reiniciar sesión aquí
+    st.session_state.clear()
+    st.experimental_rerun()
+
+@st.cache_data(show_spinner=False)
+def cargar_datos():
+    # Código para cargar datos aquí
+    pass
     
 # Cargar datos desde CSV local (o ruta que tengas)
 @st.cache_data(show_spinner=False)
