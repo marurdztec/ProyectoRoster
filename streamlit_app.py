@@ -97,6 +97,10 @@ elif st.session_state.step == 3:
                     '% de Resp', 'UDCs', 'Periodo', 'Horario', 'Coordinador de Bloque']
         columnas_existentes = [col for col in columnas if col in datos_profesor.columns]
 
+        # Eliminar columna 'index' si existe
+        if 'index' in datos_profesor.columns:
+            datos_profesor = datos_profesor.drop(columns=['index'])
+
         st.write("✅ Aquí está tu carga académica para el semestre:")
         st.dataframe(
             datos_profesor[columnas_existentes].reset_index(drop=True),
@@ -122,7 +126,7 @@ elif st.session_state.step == 3:
             comentarios = st.text_area("Comentarios, dudas o sugerencias adicionales:")
             submitted = st.form_submit_button("Enviar respuesta ✅")
             if submitted and confirmacion:
-                # Guardar en CSV
+                # Guardar en CSV de forma persistente, nunca borrando datos previos
                 respuesta_df = pd.DataFrame([{
                     "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
                     "Nombre": nombre_profesor_csv,
@@ -130,12 +134,15 @@ elif st.session_state.step == 3:
                     "Confirmación": confirmacion,
                     "Comentarios": comentarios
                 }])
-                if os.path.exists("confirmaciones_respuestas.csv"):
-                    respuesta_df.to_csv("confirmaciones_respuestas.csv", mode='a', header=False, index=False)
-                else:
-                    respuesta_df.to_csv("confirmaciones_respuestas.csv", index=False)
+                try:
+                    if os.path.exists("confirmaciones_respuestas.csv"):
+                        respuesta_df.to_csv("confirmaciones_respuestas.csv", mode='a', header=False, index=False, encoding='utf-8-sig')
+                    else:
+                        respuesta_df.to_csv("confirmaciones_respuestas.csv", index=False, encoding='utf-8-sig')
+                    st.success("✅ Tu respuesta ha sido registrada correctamente. ¡Gracias por tu tiempo y colaboración!")
+                except Exception as e:
+                    st.error(f"❌ Ocurrió un error al guardar la respuesta: {e}")
 
-                st.success("✅ Tu respuesta ha sido registrada correctamente. ¡Gracias por tu tiempo y colaboración!")
                 st.session_state.step = 4
                 st.session_state.nombre_profesor_csv = nombre_profesor_csv
                 st.session_state.datos_profesor_tabla = datos_profesor[columnas_existentes]
