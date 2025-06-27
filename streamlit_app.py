@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-from io import BytesIO
-from datetime import datetime
 
 st.set_page_config(page_title="Revisión de Carga Académica", layout="wide")
 
@@ -64,7 +62,6 @@ elif st.session_state.step == 3:
     if datos_profesor.empty:
         st.error("❌ No se encontraron asignaciones para ese número de nómina.")
     else:
-        nombre_profesor_csv = datos_profesor['Profesor'].iloc[0] if 'Profesor' in datos_profesor.columns else "Nombre no disponible"
         datos_profesor['Carga Co.'] = pd.to_numeric(datos_profesor.get('Carga Co.', 0), errors='coerce').fillna(0)
         datos_profesor['UDCs'] = pd.to_numeric(datos_profesor.get('UDCs', 0), errors='coerce').fillna(0)
         total_carga_co = round(datos_profesor['Carga Co.'].sum(), 2)
@@ -83,7 +80,7 @@ elif st.session_state.step == 3:
         columnas_existentes = [col for col in columnas if col in datos_profesor.columns]
 
         st.write("✅ Aquí está tu carga académica para el semestre:")
-        st.dataframe(datos_profesor[columnas_existentes].reset_index(drop=True), use_container_width=True)
+        st.dataframe(datos_profesor[columnas_existentes], use_container_width=True)
 
         st.write(f"""
         <div style='display:flex; gap:20px;'>
@@ -99,12 +96,12 @@ elif st.session_state.step == 3:
         </div>
         """, unsafe_allow_html=True)
 
-        st.info("Para confirmar tu carga académica y enviar comentarios adicionales, por favor utiliza el siguiente formulario:")
+        st.success("Para confirmar tu carga académica y enviar tus comentarios, por favor da clic en el siguiente botón. Se abrirá un formulario de Microsoft Forms para capturar tu confirmación y observaciones de forma ordenada.")
 
         st.markdown("""
         <a href='https://forms.office.com/r/MAFjP70biu' target='_blank'>
-            <button style="background-color:#003366; color:white; padding:10px 20px; border:none; border-radius:5px; font-size:16px;">
-                📝 Enviar confirmación y comentarios aquí
+            <button style="background-color:#003366; color:white; padding:12px 24px; border:none; border-radius:6px; font-size:16px; cursor:pointer;">
+                📝 Ir al formulario para confirmar carga y enviar comentarios
             </button>
         </a>
         """, unsafe_allow_html=True)
