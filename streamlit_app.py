@@ -56,21 +56,20 @@ if st.session_state.step == 1:
     nombre = st.text_input("Por favor, indícame tu nombre:")
     if nombre:
         st.session_state.nombre = nombre
-        st.session_state.step = 2
-        st.experimental_rerun()
+        if st.button("➡️ Continuar"):
+            st.session_state.step = 2
 
 elif st.session_state.step == 2:
     nomina = st.text_input(f"Gracias {st.session_state.nombre}, ahora por favor indícame tu número de nómina (ej. L01234567):")
     if nomina:
         st.session_state.nomina = nomina.strip()
-        st.session_state.step = 3
-        st.experimental_rerun()
+        if st.button("➡️ Continuar"):
+            st.session_state.step = 3
 
 elif st.session_state.step == 3:
     datos_profesor = df[df['Nómina'] == st.session_state.nomina].copy()
     if datos_profesor.empty:
         st.error("❌ No se encontraron asignaciones para ese número de nómina.")
-        st.stop()
     else:
         datos_profesor['Carga Co.'] = pd.to_numeric(datos_profesor.get('Carga Co.', 0), errors='coerce').fillna(0)
         datos_profesor['UDCs'] = pd.to_numeric(datos_profesor.get('UDCs', 0), errors='coerce').fillna(0)
@@ -103,8 +102,8 @@ elif st.session_state.step == 3:
         )
         if confirmacion:
             st.session_state.confirmacion = confirmacion
-            st.session_state.step = 4
-            st.experimental_rerun()
+            if st.button("➡️ Continuar"):
+                st.session_state.step = 4
 
 elif st.session_state.step == 4:
     if st.session_state.confirmacion == "Sí":
@@ -117,15 +116,13 @@ elif st.session_state.step == 4:
         comentarios = st.text_area(
             "Por favor, explícame qué parte de tu carga presenta una limitación para poder aceptarla:"
         )
-    if comentarios or comentarios == "":
+    if st.button("➡️ Finalizar"):
         st.session_state.comentarios = comentarios
         st.session_state.step = 5
-        st.experimental_rerun()
 
 elif st.session_state.step == 5:
     st.success("✅ Gracias por tus comentarios, se registraron correctamente.")
-    
-    # --- Generar HTML descargable ---
+
     datos_profesor = df[df['Nómina'] == st.session_state.nomina].copy()
     columnas = ['UF', 'Grupo', 'Nombre de UF', 'Inglés', 'Tipo de UF',
                 '% de Resp', 'UDCs', 'Periodo', 'Horario', 'Coordinador de Bloque']
@@ -182,4 +179,3 @@ elif st.session_state.step == 5:
         file_name=f"Carga_{st.session_state.nomina}_{nombre_profesor.replace(' ', '_')}.html",
         mime="text/html"
     )
-
