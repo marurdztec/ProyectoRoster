@@ -104,7 +104,15 @@ if nombre_profesor.strip():
             ]
             resultado = datos_profesor[columnas]
 
+           # Formatear columnas numéricas para que tengan 2 decimales
+            resultado = resultado.copy()
+            if 'UDCs' in resultado.columns:
+                resultado['UDCs'] = resultado['UDCs'].map('{:.2f}'.format)
+            if '% de Resp' in resultado.columns:
+                resultado['% de Resp'] = resultado['% de Resp'].map('{:.2f}'.format)
+
             st.subheader("📋 Esta es tu carga académica asignada:")
+            st.dataframe(resultado, use_container_width=True)
 
             # Mostrar tabla sin índice, con scroll horizontal y ancho al 100%
             st.dataframe(resultado.style.set_table_attributes('class="tabla-centro"').set_precision(2), use_container_width=True)
